@@ -54,13 +54,13 @@ README honest.
 
 ```bash
 # with curl
-curl -O https://raw.githubusercontent.com/Maneesh-Relanto/md-connector/main/md_connector.py
+curl -O https://raw.githubusercontent.com/Maneesh-Relanto/MD-Files-Connector/main/md_connector.py
 
 # or with wget
-wget https://raw.githubusercontent.com/Maneesh-Relanto/md-connector/main/md_connector.py
+wget https://raw.githubusercontent.com/Maneesh-Relanto/MD-Files-Connector/main/md_connector.py
 ```
 
-Or just [download md_connector.py](https://raw.githubusercontent.com/Maneesh-Relanto/md-connector/main/md_connector.py) and drop it anywhere in your project.
+Or just [download md_connector.py](https://raw.githubusercontent.com/Maneesh-Relanto/MD-Files-Connector/main/md_connector.py) and drop it anywhere in your project.
 
 ### Step 2 — Install the only dependency
 
@@ -258,4 +258,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
 
 ## License
 
-[MIT](LICENSE) © 2025 Maneesh Thakur
+[MIT](LICENSE) © 2026 Maneesh Thakur
