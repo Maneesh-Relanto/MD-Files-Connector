@@ -32,7 +32,7 @@ jobs:
           project-root: "."
           exclude-dirs: "node_modules .git venv .venv __pycache__ dist build"
           report-path: "MD_REPORT.md"
-          skip-report: "false"
+          fail-on-isolated: "false"   # set to "true" to break the build on isolated files
 
       # Print a human-readable summary in the job log
       - name: Print coverage summary

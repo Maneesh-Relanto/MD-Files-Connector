@@ -27,6 +27,11 @@ inputs:
     required: false
     default: "false"
 
+  fail-on-isolated:
+    description: "Set to 'true' to exit with code 1 if any isolated MD files are found"
+    required: false
+    default: "false"
+
 outputs:
   total-md-files:
     description: "Total number of MD files found (excluding README)"
@@ -75,7 +80,8 @@ runs:
         python ${{ github.action_path }}/md_connector.py \
           "${{ inputs.project-root }}" \
           --exclude $EXCLUDE_ARGS \
-          $REPORT_ARG 2>&1 | tee /tmp/md_connector_output.txt
+          $REPORT_ARG \
+          ${{ inputs.fail-on-isolated == 'true' && '--fail-on-isolated' || '' }} 2>&1 | tee /tmp/md_connector_output.txt
 
         # Parse outputs from a lightweight JSON sidecar
         python ${{ github.action_path }}/md_connector_outputs.py \

@@ -746,6 +746,8 @@ def main():
                         help="Output path for markdown report")
     parser.add_argument("--no-report", action="store_true",
                         help="Skip generating the MD_REPORT.md file")
+    parser.add_argument("--fail-on-isolated", action="store_true",
+                        help="Exit with code 1 if any isolated MD files are found (useful in CI)")
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
@@ -787,6 +789,18 @@ def main():
     # 7. Interactive fix menu — only in a real terminal, only when fixes needed
     if RICH_AVAILABLE and isolated and root_readme and sys.stdin.isatty():
         prompt_fix_menu(root_readme, isolated)
+
+    # 8. Fail if requested and isolated files exist
+    if args.fail_on_isolated and isolated:
+        if RICH_AVAILABLE:
+            from rich.console import Console as _C
+            _C().print(
+                f"[bold red]\n✖ Failing: {len(isolated)} isolated file(s) found. "
+                "Fix them or remove --fail-on-isolated to suppress.[/bold red]"
+            )
+        else:
+            print(f"\n✖ Failing: {len(isolated)} isolated file(s) found.")
+        sys.exit(1)
 
     sys.exit(0)
 

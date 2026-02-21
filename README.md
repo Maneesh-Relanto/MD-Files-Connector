@@ -134,6 +134,7 @@ On every push or PR that touches a `.md` file, the action will:
 | `exclude-dirs` | Space-separated dirs to skip | `node_modules .git venv ...` |
 | `report-path` | Output path for MD report | `MD_REPORT.md` |
 | `skip-report` | Skip generating report file | `false` |
+| `fail-on-isolated` | Exit code 1 if isolated files found | `false` |
 
 ### Action Outputs
 
@@ -217,6 +218,7 @@ options:
   --exclude [...]    Directory names to exclude from scan
   --report REPORT    Output path for markdown report (default: MD_REPORT.md)
   --no-report        Skip generating the MD_REPORT.md file
+  --fail-on-isolated Exit with code 1 if any isolated MD files are found
 ```
 
 **Examples:**
