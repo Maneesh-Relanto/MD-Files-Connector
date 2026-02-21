@@ -1,5 +1,11 @@
 # 📋 MD Files Connector
 
+[![CI](https://github.com/Maneesh-Relanto/MD-Files-Connector/actions/workflows/ci.yml/badge.svg)](https://github.com/Maneesh-Relanto/MD-Files-Connector/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![GitHub release](https://img.shields.io/github/v/release/Maneesh-Relanto/MD-Files-Connector?color=orange&label=release)](https://github.com/Maneesh-Relanto/MD-Files-Connector/releases)
+[![Works with any language](https://img.shields.io/badge/works%20with-any%20language-blueviolet)](#-privacy--security)
+
 A lightweight CLI tool + GitHub Action that scans your project for Markdown files
 and tells you which ones are **referenced in your root README** — and which ones
 are **isolated and invisible** to readers.
@@ -27,8 +33,17 @@ README honest.
 - 📄 Generates an `MD_REPORT.md` with a full breakdown
 - 🤖 Runs as a **GitHub Action** on every push or PR
 - � Interactive fix menu — auto-links isolated files into your README
-- 💡 No install, no config — one file, one command
+- 💡 No install, no config — one file, one command- 🌐 **Language agnostic** — works with any project regardless of tech stack
 
+---
+
+## 🔒 Privacy & Security
+
+- **Nothing leaves your machine.** The tool reads file paths and Markdown content locally to build the coverage report. No data is collected, transmitted, or stored anywhere outside your project.
+- **No code is read or copied.** Only `.md` files are scanned — your source code, configs, and secrets are never touched.
+- **No network calls.** The CLI runs entirely offline. The GitHub Action only uses the GitHub-provided runner environment; it does not call any external service.
+- **Read-only by default.** The tool never modifies any file unless you explicitly choose a fix option (G or D) in the interactive menu — and even then, only your root `README.md` is updated.
+- **Open source.** The full source is a single readable file — [`md_connector.py`](md_connector.py). You can audit every line before running it.
 ---
 
 ## 🚀 Quickest Way to Start — 60 seconds
