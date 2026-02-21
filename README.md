@@ -111,6 +111,7 @@ jobs:
         uses: Maneesh-Relanto/md-connector@v1
         with:
           project-root: "."
+          exclude-dirs: "node_modules .git venv .venv __pycache__ dist build"
           report-path: "MD_REPORT.md"
 
       - name: Show coverage summary
