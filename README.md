@@ -1,6 +1,8 @@
 # 📋 MD Files Connector
 
 [![CI](https://github.com/Maneesh-Relanto/MD-Files-Connector/actions/workflows/ci.yml/badge.svg)](https://github.com/Maneesh-Relanto/MD-Files-Connector/actions/workflows/ci.yml)
+[![GitHub Marketplace](https://img.shields.io/badge/marketplace-MD%20Files%20Connector-blue?logo=github)](https://github.com/marketplace/actions/md-files-connector)
+[![GitHub release](https://img.shields.io/github/v/release/Maneesh-Relanto/MD-Files-Connector)](https://github.com/Maneesh-Relanto/MD-Files-Connector/releases/latest)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Works with any language](https://img.shields.io/badge/works%20with-any%20language-blueviolet)](#-privacy--security)
