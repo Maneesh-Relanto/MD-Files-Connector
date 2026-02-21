@@ -1,0 +1,91 @@
+name: "MD Files Connector"
+description: "Scans your project for Markdown files and checks which ones are referenced in the root README.md. Outputs a dashboard and generates an MD_REPORT.md."
+author: "md-connector"
+
+branding:
+  icon: "file-text"
+  color: "blue"
+
+inputs:
+  project-root:
+    description: "Root directory of the project to scan"
+    required: false
+    default: "."
+
+  exclude-dirs:
+    description: "Space-separated list of directory names to exclude"
+    required: false
+    default: "node_modules .git venv .venv __pycache__ dist build"
+
+  report-path:
+    description: "Path for the generated MD report file"
+    required: false
+    default: "MD_REPORT.md"
+
+  skip-report:
+    description: "Set to 'true' to skip generating MD_REPORT.md"
+    required: false
+    default: "false"
+
+outputs:
+  total-md-files:
+    description: "Total number of MD files found (excluding README)"
+    value: ${{ steps.run-scanner.outputs.total }}
+
+  linked-files:
+    description: "Number of MD files linked in README"
+    value: ${{ steps.run-scanner.outputs.linked }}
+
+  isolated-files:
+    description: "Number of MD files NOT linked in README"
+    value: ${{ steps.run-scanner.outputs.isolated }}
+
+  coverage:
+    description: "Coverage percentage (linked / total * 100)"
+    value: ${{ steps.run-scanner.outputs.coverage }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install dependencies
+      shell: bash
+      run: pip install rich
+
+    - name: Run MD Files Connector
+      id: run-scanner
+      shell: bash
+      run: |
+        EXCLUDE_ARGS=""
+        for dir in ${{ inputs.exclude-dirs }}; do
+          EXCLUDE_ARGS="$EXCLUDE_ARGS $dir"
+        done
+
+        REPORT_ARG=""
+        if [ "${{ inputs.skip-report }}" = "true" ]; then
+          REPORT_ARG="--no-report"
+        else
+          REPORT_ARG="--report ${{ inputs.report-path }}"
+        fi
+
+        python ${{ github.action_path }}/md_connector.py \
+          "${{ inputs.project-root }}" \
+          --exclude $EXCLUDE_ARGS \
+          $REPORT_ARG 2>&1 | tee /tmp/md_connector_output.txt
+
+        # Parse outputs from a lightweight JSON sidecar
+        python ${{ github.action_path }}/md_connector_outputs.py \
+          "${{ inputs.project-root }}" \
+          --exclude $EXCLUDE_ARGS >> $GITHUB_OUTPUT
+
+    - name: Upload MD Report as artifact
+      if: inputs.skip-report != 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: md-connector-report
+        path: ${{ inputs.report-path }}
+        if-no-files-found: warn

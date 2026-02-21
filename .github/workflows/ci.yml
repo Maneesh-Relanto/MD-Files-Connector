@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    name: Run tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest tests/ -v --cov=md_connector --cov-report=term-missing
+
+  self-check:
+    name: MD Files Connector (self-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run MD Files Connector on this repo
+        id: md-connector
+        uses: ./
+        with:
+          project-root: "."
+          report-path: "MD_REPORT.md"
+
+      - name: Show coverage
+        run: |
+          echo "Coverage : ${{ steps.md-connector.outputs.coverage }}%"
+          echo "Isolated : ${{ steps.md-connector.outputs.isolated-files }} file(s)"

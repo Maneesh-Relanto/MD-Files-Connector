@@ -1,0 +1,54 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Copy this file into .github/workflows/md-check.yml in YOUR repository.
+# It uses the MD Files Connector GitHub Action to check that every .md file
+# in your project is referenced in your root README.md.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: MD Files Connector Check
+
+on:
+  push:
+    branches: ["main", "master"]
+    paths:
+      - "**.md"           # only run when MD files change
+  pull_request:
+    paths:
+      - "**.md"
+  workflow_dispatch:       # allow manual trigger
+
+jobs:
+  md-check:
+    name: Check MD Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run MD Files Connector
+        id: md-connector
+        uses: Maneesh-Relanto/md-connector@v1
+        with:
+          project-root: "."
+          exclude-dirs: "node_modules .git venv .venv __pycache__ dist build"
+          report-path: "MD_REPORT.md"
+          skip-report: "false"
+
+      # Print a human-readable summary in the job log
+      - name: Print coverage summary
+        run: |
+          echo "📊 MD Coverage Results"
+          echo "  Total MD files  : ${{ steps.md-connector.outputs.total-md-files }}"
+          echo "  Linked in README: ${{ steps.md-connector.outputs.linked-files }}"
+          echo "  Isolated files  : ${{ steps.md-connector.outputs.isolated-files }}"
+          echo "  Coverage        : ${{ steps.md-connector.outputs.coverage }}%"
+
+      # Optional: commit the generated MD_REPORT.md back to the repo
+      # Uncomment if you want the report auto-committed on every push to main
+      #
+      # - name: Commit MD_REPORT.md
+      #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      #   uses: stefanzweifel/git-auto-commit-action@v5
+      #   with:
+      #     commit_message: "docs: update MD_REPORT.md [skip ci]"
+      #     file_pattern: "MD_REPORT.md"

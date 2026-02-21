@@ -1,0 +1,9 @@
+# Runtime dependency
+-r requirements.txt
+
+# Testing
+pytest>=8.0.0
+pytest-cov>=5.0.0
+
+# Type checking (optional)
+mypy>=1.0.0
