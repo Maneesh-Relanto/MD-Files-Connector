@@ -10,6 +10,9 @@ from md_connector import (
     find_all_readmes,
     extract_md_references,
     classify_files,
+    fix_generic,
+    fix_docs,
+    MDFile,
 )
 
 # Path to the bundled fixture project
@@ -152,3 +155,155 @@ class TestFixtureProject:
         # docs/API.md is intentionally orphaned in the fixture
         isolated_names = [m.path.name for m in isolated]
         assert "API.md" in isolated_names
+
+
+# ── fix_generic ───────────────────────────────────────────────────────────────
+
+def _make_isolated(tmp_path: Path, filename: str, title: str) -> MDFile:
+    """Helper: create a real file and return an MDFile pointing at it."""
+    p = tmp_path / filename
+    p.write_text(f"# {title}\n", encoding="utf-8")
+    return MDFile(path=p, title=title)
+
+
+class TestFixGeneric:
+    def test_creates_new_section(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text("# My Project\n\nSome intro.\n", encoding="utf-8")
+        iso = _make_isolated(tmp_path, "guide.md", "Guide")
+
+        added = fix_generic(readme, [iso])
+
+        content = readme.read_text(encoding="utf-8")
+        assert added == 1
+        assert "## \U0001f4ce Other Documentation" in content
+        assert "- [Guide](guide.md)" in content
+
+    def test_returns_count_of_links_added(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text("# Project\n", encoding="utf-8")
+        files = [
+            _make_isolated(tmp_path, "a.md", "Alpha"),
+            _make_isolated(tmp_path, "b.md", "Beta"),
+            _make_isolated(tmp_path, "c.md", "Gamma"),
+        ]
+
+        added = fix_generic(readme, files)
+
+        assert added == 3
+
+    def test_appends_only_new_links_when_section_exists(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text(
+            "# Project\n\n## \U0001f4ce Other Documentation\n\n- [Alpha](a.md)\n",
+            encoding="utf-8",
+        )
+        _make_isolated(tmp_path, "a.md", "Alpha")  # already present
+        beta = _make_isolated(tmp_path, "b.md", "Beta")  # new
+
+        added = fix_generic(readme, [MDFile(path=tmp_path / "a.md", title="Alpha"), beta])
+
+        content = readme.read_text(encoding="utf-8")
+        assert added == 1
+        assert content.count("- [Alpha]") == 1   # no duplicate
+        assert "- [Beta](b.md)" in content
+
+    def test_returns_zero_when_all_links_already_present(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text(
+            "# Project\n\n## \U0001f4ce Other Documentation\n\n- [Guide](guide.md)\n",
+            encoding="utf-8",
+        )
+        iso = _make_isolated(tmp_path, "guide.md", "Guide")
+
+        added = fix_generic(readme, [iso])
+
+        assert added == 0
+
+    def test_does_not_duplicate_section_heading(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text("# Project\n", encoding="utf-8")
+        iso = _make_isolated(tmp_path, "x.md", "X Doc")
+        fix_generic(readme, [iso])
+        fix_generic(readme, [iso])  # run twice
+
+        content = readme.read_text(encoding="utf-8")
+        assert content.count("## \U0001f4ce Other Documentation") == 1
+
+
+# ── fix_docs ──────────────────────────────────────────────────────────────────
+
+class TestFixDocs:
+    def test_finds_documentation_heading_and_appends(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text("# Project\n\n## Documentation\n\nSome text.\n", encoding="utf-8")
+        iso = _make_isolated(tmp_path, "api.md", "API Reference")
+
+        added, section = fix_docs(readme, [iso])
+
+        content = readme.read_text(encoding="utf-8")
+        assert added == 1
+        assert section == "Documentation"
+        assert "- [API Reference](api.md)" in content
+
+    def test_finds_docs_heading_variant(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text("# Project\n\n## Docs\n\nLinks go here.\n", encoding="utf-8")
+        iso = _make_isolated(tmp_path, "guide.md", "Guide")
+
+        added, section = fix_docs(readme, [iso])
+
+        assert added == 1
+        assert section == "Docs"
+
+    def test_returns_zero_and_empty_when_no_docs_section(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text("# Project\n\n## Installation\n\n## Usage\n", encoding="utf-8")
+        iso = _make_isolated(tmp_path, "notes.md", "Notes")
+
+        added, section = fix_docs(readme, [iso])
+
+        assert added == 0
+        assert section == ""
+        # README must be unmodified
+        assert "Notes" not in readme.read_text(encoding="utf-8")
+
+    def test_does_not_add_duplicate_links(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text(
+            "# Project\n\n## Documentation\n\n- [Guide](guide.md)\n",
+            encoding="utf-8",
+        )
+        iso = _make_isolated(tmp_path, "guide.md", "Guide")
+
+        added, _ = fix_docs(readme, [iso])
+
+        assert added == 0
+        assert readme.read_text(encoding="utf-8").count("- [Guide]") == 1
+
+    def test_does_not_match_docker_or_docstring(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text("# Project\n\n## Docker Setup\n\n## Docstring Guide\n", encoding="utf-8")
+        iso = _make_isolated(tmp_path, "x.md", "X")
+
+        added, section = fix_docs(readme, [iso])
+
+        assert added == 0
+        assert section == ""
+
+    def test_inserts_only_into_docs_section_not_after(self, tmp_path):
+        readme = tmp_path / "README.md"
+        readme.write_text(
+            "# Project\n\n## Documentation\n\n## Installation\n",
+            encoding="utf-8",
+        )
+        iso = _make_isolated(tmp_path, "guide.md", "Guide")
+
+        fix_docs(readme, [iso])
+
+        content = readme.read_text(encoding="utf-8")
+        doc_pos = content.index("## Documentation")
+        install_pos = content.index("## Installation")
+        link_pos = content.index("- [Guide]")
+        # Link must appear between the two headings
+        assert doc_pos < link_pos < install_pos
