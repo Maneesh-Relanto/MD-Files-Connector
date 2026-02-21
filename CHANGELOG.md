@@ -29,4 +29,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Example workflow in `examples/md-check.yml`
 - MIT License
 
-[1.0.0]: https://github.com/Maneesh-Relanto/MD-Files-Connector/releases/tag/v1
+[1.0.0]: https://github.com/Maneesh-Relanto/MD-Files-Connector/releases/tag/v1.0.0
