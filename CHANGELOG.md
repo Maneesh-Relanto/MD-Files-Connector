@@ -23,8 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--fail-on-isolated` CLI flag — exits with code 1 if isolated files found (CI-friendly)
 - `--no-report` CLI flag — skip writing `MD_REPORT.md`
 - `--exclude` CLI flag — space-separated directory names to skip
+- Auto-exclusion of the generated report file (`MD_REPORT.md`) from the scan — running the tool twice no longer pollutes the isolated list
 - Whole-word docs heading regex `\b(docs?|documentation)\b` to avoid false positives
-- Test suite: unit tests for `parse_md_content`, `extract_md_references`, `classify_files`; integration test against fixture project
+- Test suite: unit tests for `parse_md_content`, `extract_md_references`, `classify_files`, `fix_generic`, `fix_docs`; integration test against fixture project; complex fixture (`tests/test-project2`) covering 15 edge cases
 - Example workflow in `examples/md-check.yml`
 - MIT License
 

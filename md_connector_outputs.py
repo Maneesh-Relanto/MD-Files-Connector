@@ -28,10 +28,16 @@ def main():
         nargs="*",
         default=["node_modules", ".git", "venv", ".venv", "__pycache__", "dist", "build"],
     )
+    parser.add_argument("--report", default="MD_REPORT.md",
+                        help="Report path to exclude from scan (same as main script)")
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
-    all_md = find_all_md_files(root, args.exclude)
+    report_path = Path(args.report)
+    if not report_path.is_absolute():
+        report_path = root / report_path
+
+    all_md = find_all_md_files(root, args.exclude, exclude_files={report_path})
     all_readmes = find_all_readmes(all_md)
     root_readme = next((rp for rp in all_readmes if rp.parent.resolve() == root.resolve()), None)
 

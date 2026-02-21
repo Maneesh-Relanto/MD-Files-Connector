@@ -86,7 +86,8 @@ runs:
         # Parse outputs from a lightweight JSON sidecar
         python ${{ github.action_path }}/md_connector_outputs.py \
           "${{ inputs.project-root }}" \
-          --exclude $EXCLUDE_ARGS >> $GITHUB_OUTPUT
+          --exclude $EXCLUDE_ARGS \
+          --report ${{ inputs.report-path }} >> $GITHUB_OUTPUT
 
     - name: Upload MD Report as artifact
       if: inputs.skip-report != 'true'

@@ -168,12 +168,19 @@ def parse_md_content(path: Path) -> dict:
 
 # ── File discovery ─────────────────────────────────────────────────────────────
 
-def find_all_md_files(root: Path, exclude_dirs: list[str]) -> list[MDFile]:
+def find_all_md_files(
+    root: Path,
+    exclude_dirs: list[str],
+    exclude_files: set[Path] | None = None,
+) -> list[MDFile]:
     """Recursively find all .md files, parse content, return MDFile list."""
+    excluded = {p.resolve() for p in (exclude_files or [])}
     results = []
     for path in sorted(root.rglob("*.md")):
         parts = path.relative_to(root).parts
         if any(part in exclude_dirs for part in parts):
+            continue
+        if path.resolve() in excluded:
             continue
         meta = parse_md_content(path)
         is_readme = path.stem.lower() == "readme"
@@ -755,8 +762,13 @@ def main():
         print(f"Error: '{root}' is not a valid directory.")
         sys.exit(1)
 
-    # 1. Scan & parse all MD files
-    all_md = find_all_md_files(root, args.exclude)
+    # Resolve report path so we can exclude it from the scan
+    report_path = Path(args.report)
+    if not report_path.is_absolute():
+        report_path = root / report_path
+
+    # 1. Scan & parse all MD files (exclude the generated report itself)
+    all_md = find_all_md_files(root, args.exclude, exclude_files={report_path})
 
     # 2. Locate the root README (single source of truth)
     all_readmes = find_all_readmes(all_md)
@@ -777,9 +789,6 @@ def main():
 
     # 5. MD Report
     if not args.no_report:
-        report_path = Path(args.report)
-        if not report_path.is_absolute():
-            report_path = root / report_path
         generate_md_report(root, root_readme, all_md, linked, isolated, report_path)
         print(f"📄 Report written to: {report_path}")
 
