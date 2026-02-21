@@ -1,5 +1,5 @@
 name: "MD Files Connector"
-description: "Scans your project for Markdown files and checks which ones are referenced in the root README.md. Outputs a dashboard and generates an MD_REPORT.md."
+description: "Scans your project for Markdown files, checks root README coverage, outputs a dashboard, and generates MD_REPORT.md."
 author: "md-connector"
 
 branding:
