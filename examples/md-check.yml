@@ -27,7 +27,7 @@ jobs:
 
       - name: Run MD Files Connector
         id: md-connector
-        uses: Maneesh-Relanto/md-connector@v1
+        uses: Maneesh-Relanto/MD-Files-Connector@v1
         with:
           project-root: "."
           exclude-dirs: "node_modules .git venv .venv __pycache__ dist build"

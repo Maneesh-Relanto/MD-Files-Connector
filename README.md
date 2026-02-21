@@ -33,7 +33,8 @@ README honest.
 - 📄 Generates an `MD_REPORT.md` with a full breakdown
 - 🤖 Runs as a **GitHub Action** on every push or PR
 - � Interactive fix menu — auto-links isolated files into your README
-- 💡 No install, no config — one file, one command- 🌐 **Language agnostic** — works with any project regardless of tech stack
+- 💡 No install, no config — one file, one command
+- 🌐 **Language agnostic** — works with any project regardless of tech stack
 
 ---
 
@@ -108,7 +109,7 @@ jobs:
 
       - name: Run MD Files Connector
         id: md-connector
-        uses: Maneesh-Relanto/md-connector@v1
+        uses: Maneesh-Relanto/MD-Files-Connector@v1
         with:
           project-root: "."
           exclude-dirs: "node_modules .git venv .venv __pycache__ dist build"
