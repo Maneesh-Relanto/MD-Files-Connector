@@ -51,6 +51,93 @@ class MDFile:
 
 # ── Content parsing ────────────────────────────────────────────────────────────
 
+_CODE_FENCE_RE = re.compile(r'^(`{3}|~{3})')
+_WORD_RE = re.compile(r'\w+')
+_HEADING_RE = re.compile(r'^(#{1,3})\s+(.+)', re.MULTILINE)
+_DOCS_RE = re.compile(r'\b(docs?|documentation)\b', re.IGNORECASE)
+
+
+def _is_code_fence(stripped: str) -> bool:
+    return bool(_CODE_FENCE_RE.match(stripped))
+
+
+def _is_skippable_line(stripped: str) -> bool:
+    """Return True for badge images and raw HTML lines."""
+    return bool(re.match(r'^\[!\[', stripped) or re.match(r'^<', stripped))
+
+
+def _looks_like_text(stripped: str) -> bool:
+    """Return True for plain-text lines that could begin a description."""
+    return (
+        bool(stripped)
+        and len(stripped) < 80
+        and not stripped.startswith("-")
+        and not stripped.startswith("*")
+    )
+
+
+def _scan_structure(lines: list[str]) -> tuple[str, list[str]]:
+    """Return (h1_title, h2_sections) from markdown lines, skipping code blocks."""
+    title = ""
+    sections: list[str] = []
+    in_code = False
+    for line in lines:
+        stripped = line.strip()
+        if _is_code_fence(stripped):
+            in_code = not in_code
+            continue
+        if in_code:
+            continue
+        if not title and stripped.startswith("# "):
+            title = stripped[2:].strip()
+        elif stripped.startswith("## "):
+            sections.append(stripped[3:].strip())
+    return title, sections
+
+
+def _strip_code_blocks(lines: list[str]) -> list[str]:
+    """Return lines with fenced code blocks and badge/HTML lines removed."""
+    result = []
+    in_code = False
+    for line in lines:
+        stripped = line.strip()
+        if _is_code_fence(stripped):
+            in_code = not in_code
+            continue
+        if not in_code and not _is_skippable_line(stripped):
+            result.append(stripped)
+    return result
+
+
+def _first_paragraph_after_heading(lines: list[str]) -> list[str]:
+    """Return the first paragraph of text that appears after a heading line."""
+    past_heading = False
+    para: list[str] = []
+    for line in lines:
+        if line.startswith("#"):
+            past_heading = True
+            if para:
+                break
+            continue
+        if not past_heading:
+            if _looks_like_text(line):
+                past_heading = True
+            continue
+        if line:
+            para.append(line)
+        elif para:
+            break
+    return para
+
+
+def _scan_description(lines: list[str]) -> str:
+    """Return the first real paragraph after the opening heading."""
+    clean = _strip_code_blocks(lines)
+    para = _first_paragraph_after_heading(clean)
+    result = " ".join(para)
+    return result[:157] + "..." if len(result) > 160 else result
+
+
 def parse_md_content(path: Path) -> dict:
     """
     Extract metadata from a Markdown file:
@@ -65,72 +152,16 @@ def parse_md_content(path: Path) -> dict:
         return {"title": path.stem, "description": "", "word_count": 0, "sections": []}
 
     lines = content.splitlines()
-    title = ""
-    description = ""
-    sections = []
-    desc_lines = []
-    in_code_block = False
-    past_title = False
+    title, sections = _scan_structure(lines)
+    description = _scan_description(lines)
 
-    for line in lines:
-        stripped = line.strip()
-
-        # Track fenced code blocks so we don't parse inside them
-        if stripped.startswith("```") or stripped.startswith("~~~"):
-            in_code_block = not in_code_block
-            continue
-        if in_code_block:
-            continue
-
-        # H1 → title
-        if not title and stripped.startswith("# "):
-            title = stripped[2:].strip()
-            past_title = True
-            continue
-
-        # H2 → sections list
-        if stripped.startswith("## "):
-            sections.append(stripped[3:].strip())
-            if description:
-                continue   # already have description, just collect sections
-            past_title = True
-            continue
-
-        # Skip badges/shields lines and HTML tags
-        if re.match(r'^\[!\[', stripped) or re.match(r'^<', stripped):
-            continue
-
-        # Collect description from first real paragraph after title
-        if past_title and stripped and not description:
-            desc_lines.append(stripped)
-            # Paragraph ends at blank line
-        elif past_title and not stripped and desc_lines:
-            description = " ".join(desc_lines)
-            desc_lines = []
-        elif not past_title and stripped:
-            # File has no H1 yet but has content — treat as potential title
-            # only if it looks like a heading (short line)
-            if len(stripped) < 80 and not stripped.startswith("-") and not stripped.startswith("*"):
-                past_title = True
-
-    # Fallback: description from accumulated lines
-    if not description and desc_lines:
-        description = " ".join(desc_lines)
-
-    # Truncate description
-    if len(description) > 160:
-        description = description[:157] + "..."
-
-    # Fallback title
     if not title:
         title = path.stem.replace("-", " ").replace("_", " ").title()
-
-    word_count = len(re.findall(r'\w+', content))
 
     return {
         "title": title,
         "description": description,
-        "word_count": word_count,
+        "word_count": len(_WORD_RE.findall(content)),
         "sections": sections[:6],   # cap at 6 to keep report tidy
     }
 
@@ -240,6 +271,67 @@ def classify_files(
 
 # ── Terminal dashboard ─────────────────────────────────────────────────────────
 
+def _make_summary_table(
+    root: Path,
+    root_readme: Path | None,
+    total: int,
+    linked: list[MDFile],
+    isolated: list[MDFile],
+) -> "Table":
+    readme_display = str(root_readme.relative_to(root)) if root_readme else "[red]NOT FOUND[/red]"
+    coverage = (len(linked) / total * 100) if total > 0 else 0
+    t = Table(box=box.SIMPLE, show_header=False, padding=(0, 2))
+    t.add_column(style="bold")
+    t.add_column()
+    t.add_row("📄 Root README", readme_display)
+    t.add_row("📁 Total MD files (excl. root README)", str(total))
+    t.add_row("✅ Linked in root README", f"[green]{len(linked)}[/green]")
+    t.add_row(
+        "⚠️  Isolated (not in root README)",
+        f"[yellow]{len(isolated)}[/yellow]" if isolated else "[green]0[/green]",
+    )
+    t.add_row("📊 README coverage", f"[bold]{coverage:.1f}%[/bold]")
+    return t
+
+
+def _make_linked_table(root: Path, linked: list[MDFile]) -> "Table":
+    t = Table(box=box.SIMPLE_HEAD, show_header=True)
+    t.add_column("#", style="dim", width=4)
+    t.add_column("File", style="green", min_width=28)
+    t.add_column("Title", min_width=20)
+    t.add_column("Words", justify="right", style="dim", width=7)
+    t.add_column("Sections", style="dim")
+    for i, md in enumerate(linked, 1):
+        sections_str = ", ".join(md.sections[:3]) + ("…" if len(md.sections) > 3 else "")
+        t.add_row(
+            str(i),
+            str(md.path.relative_to(root)),
+            md.title[:35] + ("…" if len(md.title) > 35 else ""),
+            str(md.word_count),
+            sections_str or "—",
+        )
+    return t
+
+
+def _make_isolated_table(root: Path, isolated: list[MDFile]) -> "Table":
+    t = Table(box=box.SIMPLE_HEAD, show_header=True)
+    t.add_column("#", style="dim", width=4)
+    t.add_column("File", style="yellow", min_width=28)
+    t.add_column("Title", min_width=20)
+    t.add_column("Words", justify="right", style="dim", width=7)
+    t.add_column("First line / description", style="dim")
+    for i, md in enumerate(isolated, 1):
+        desc = md.description[:55] + ("…" if len(md.description) > 55 else "") or "—"
+        t.add_row(
+            str(i),
+            str(md.path.relative_to(root)),
+            md.title[:35] + ("…" if len(md.title) > 35 else ""),
+            str(md.word_count),
+            desc,
+        )
+    return t
+
+
 def print_dashboard_rich(
     root: Path,
     root_readme: Path | None,
@@ -248,70 +340,25 @@ def print_dashboard_rich(
     isolated: list[MDFile],
 ):
     console = Console()
-    total = len(all_md) - (1 if root_readme else 0)   # exclude root README
-    coverage = (len(linked) / total * 100) if total > 0 else 0
+    total = len(all_md) - (1 if root_readme else 0)
 
     console.print()
     console.print(Panel.fit(
-        f"[bold cyan]📋 MD Files Connector[/bold cyan]\n"
-        f"[dim]Project root: {root}[/dim]",
-        border_style="cyan"
+        f"[bold cyan]📋 MD Files Connector[/bold cyan]\n[dim]Project root: {root}[/dim]",
+        border_style="cyan",
     ))
+    console.print(_make_summary_table(root, root_readme, total, linked, isolated))
 
-    # ── Summary
-    readme_display = str(root_readme.relative_to(root)) if root_readme else "[red]NOT FOUND[/red]"
-    summary = Table(box=box.SIMPLE, show_header=False, padding=(0, 2))
-    summary.add_column(style="bold")
-    summary.add_column()
-    summary.add_row("📄 Root README", readme_display)
-    summary.add_row("📁 Total MD files (excl. root README)", str(total))
-    summary.add_row("✅ Linked in root README", f"[green]{len(linked)}[/green]")
-    summary.add_row("⚠️  Isolated (not in root README)",
-                    f"[yellow]{len(isolated)}[/yellow]" if isolated else "[green]0[/green]")
-    summary.add_row("📊 README coverage", f"[bold]{coverage:.1f}%[/bold]")
-    console.print(summary)
-
-    # ── Linked files with content
     if linked:
         console.print(Panel("[bold green]✅ Linked Files[/bold green]", border_style="green"))
-        t = Table(box=box.SIMPLE_HEAD, show_header=True)
-        t.add_column("#", style="dim", width=4)
-        t.add_column("File", style="green", min_width=28)
-        t.add_column("Title", min_width=20)
-        t.add_column("Words", justify="right", style="dim", width=7)
-        t.add_column("Sections", style="dim")
-        for i, md in enumerate(linked, 1):
-            sections_str = ", ".join(md.sections[:3]) + ("…" if len(md.sections) > 3 else "")
-            t.add_row(
-                str(i),
-                str(md.path.relative_to(root)),
-                md.title[:35] + ("…" if len(md.title) > 35 else ""),
-                str(md.word_count),
-                sections_str or "—",
-            )
-        console.print(t)
+        console.print(_make_linked_table(root, linked))
 
-    # ── Isolated files with content preview
     if isolated:
         console.print(Panel(
             "[bold yellow]⚠️  Isolated Files — not in root README[/bold yellow]",
-            border_style="yellow"
+            border_style="yellow",
         ))
-        t = Table(box=box.SIMPLE_HEAD, show_header=True)
-        t.add_column("#", style="dim", width=4)
-        t.add_column("File", style="yellow", min_width=28)
-        t.add_column("Title", min_width=20)
-        t.add_column("Words", justify="right", style="dim", width=7)
-        t.add_column("First line / description", style="dim")
-        for i, md in enumerate(isolated, 1):
-            t.add_row(
-                str(i),
-                str(md.path.relative_to(root)),
-                md.title[:35] + ("…" if len(md.title) > 35 else ""),
-                str(md.word_count),
-                md.description[:55] + ("…" if len(md.description) > 55 else "") or "—",
-            )
-        console.print(t)
+        console.print(_make_isolated_table(root, isolated))
         console.print("[yellow]💡 Add these to your root README.md to improve discoverability.[/yellow]\n")
     else:
         console.print("[bold green]🎉 All MD files are linked in the root README![/bold green]\n")
@@ -351,6 +398,49 @@ def print_dashboard_plain(
 
 # ── Markdown report ────────────────────────────────────────────────────────────
 
+def _md_linked_section(root: Path, linked: list[MDFile]) -> list[str]:
+    """Return markdown table lines for the linked-files section."""
+    rows = [
+        "## ✅ Linked Files\n",
+        "| # | File | Title | Words | Sections |",
+        "|---|------|-------|-------|----------|",
+    ]
+    for i, md in enumerate(linked, 1):
+        sections = ", ".join(md.sections[:4]) or "—"
+        rows.append(
+            f"| {i} | `{md.path.relative_to(root)}` | {md.title} | {md.word_count} | {sections} |"
+        )
+    rows.append("")
+    return rows
+
+
+def _md_isolated_section(root: Path, isolated: list[MDFile]) -> list[str]:
+    """Return markdown lines for the isolated-files section including suggestions."""
+    rows = [
+        "## ⚠️ Isolated Files\n",
+        "> These files are **not referenced** by the root `README.md`.\n",
+        "| # | File | Title | Words | Description |",
+        "|---|------|-------|-------|-------------|",
+    ]
+    for i, md in enumerate(isolated, 1):
+        desc = md.description.replace("|", "\\|") if md.description else "—"
+        rows.append(
+            f"| {i} | `{md.path.relative_to(root)}` | {md.title} | {md.word_count} | {desc} |"
+        )
+    rows += [
+        "",
+        "### 💡 Suggested additions\n",
+        "Add the following snippets to your root `README.md`:\n",
+        "```markdown",
+    ]
+    for md in isolated:
+        rows.append(f"- [{md.title}]({md.path.relative_to(root)})")
+        if md.description:
+            rows.append(f"  _{md.description}_")
+    rows += ["```", ""]
+    return rows
+
+
 def generate_md_report(
     root: Path,
     root_readme: Path | None,
@@ -378,46 +468,10 @@ def generate_md_report(
         "",
     ]
 
-    # Linked files
     if linked:
-        lines += [
-            "## ✅ Linked Files\n",
-            "| # | File | Title | Words | Sections |",
-            "|---|------|-------|-------|----------|",
-        ]
-        for i, md in enumerate(linked, 1):
-            sections = ", ".join(md.sections[:4]) or "—"
-            lines.append(
-                f"| {i} | `{md.path.relative_to(root)}` | {md.title} | {md.word_count} | {sections} |"
-            )
-        lines.append("")
-
-    # Isolated files with description
+        lines += _md_linked_section(root, linked)
     if isolated:
-        lines += [
-            "## ⚠️ Isolated Files\n",
-            "> These files are **not referenced** by the root `README.md`.\n",
-            "| # | File | Title | Words | Description |",
-            "|---|------|-------|-------|-------------|",
-        ]
-        for i, md in enumerate(isolated, 1):
-            desc = md.description.replace("|", "\\|") if md.description else "—"
-            lines.append(
-                f"| {i} | `{md.path.relative_to(root)}` | {md.title} | {md.word_count} | {desc} |"
-            )
-
-        lines += [
-            "",
-            "### 💡 Suggested additions\n",
-            "Add the following snippets to your root `README.md`:\n",
-            "```markdown",
-        ]
-        for md in isolated:
-            rel = md.path.relative_to(root)
-            lines.append(f"- [{md.title}]({rel})")
-            if md.description:
-                lines.append(f"  _{md.description}_")
-        lines += ["```", ""]
+        lines += _md_isolated_section(root, isolated)
     else:
         lines.append("## 🎉 All MD files are linked in the root README!\n")
 
@@ -526,14 +580,13 @@ def fix_docs(root_readme: Path, isolated: list[MDFile]) -> tuple[int, str]:
     link_lines = _build_link_lines(isolated, root_readme)
 
     # Find a heading containing "doc" (Documentation, Docs, Docs & Guides …)
-    heading_re = re.compile(r'^(#{1,3})\s+(.+)', re.IGNORECASE)
     section_start = None
     section_level = 0
     section_title = ""
 
     for i, line in enumerate(lines):
-        m = heading_re.match(line)
-        if m and re.search(r'\b(docs?|documentation)\b', m.group(2), re.IGNORECASE):
+        m = _HEADING_RE.match(line)
+        if m and _DOCS_RE.search(m.group(2)):
             section_start = i
             section_level = len(m.group(1))
             section_title = m.group(2).strip()
@@ -546,7 +599,7 @@ def fix_docs(root_readme: Path, isolated: list[MDFile]) -> tuple[int, str]:
     # Find where the section ends (next heading at same or higher level, or EOF)
     section_end = len(lines)
     for i in range(section_start + 1, len(lines)):
-        m = heading_re.match(lines[i])
+        m = _HEADING_RE.match(lines[i])
         if m and len(m.group(1)) <= section_level:
             section_end = i
             break
@@ -571,6 +624,25 @@ def fix_docs(root_readme: Path, isolated: list[MDFile]) -> tuple[int, str]:
 
 # ── Interactive fix menu ───────────────────────────────────────────────────────
 
+
+def _find_docs_heading(content: str) -> str | None:
+    """Return the first heading text matching 'docs' or 'documentation', or None."""
+    for m in _HEADING_RE.finditer(content):
+        title = m.group(2).strip()
+        if _DOCS_RE.search(title):
+            return title
+    return None
+
+
+def _prompt_input(console: "Console", prompt: str, valid: set[str]) -> str:
+    """Loop until the user enters one of the valid single-character choices."""
+    while True:
+        choice = console.input(prompt).strip().upper()
+        if choice in valid:
+            return choice
+        console.print(f"[red]  ✗ Invalid — please enter {' or '.join(sorted(valid))}.[/red]")
+
+
 def prompt_fix_menu(
     root_readme: Path,
     isolated: list[MDFile],
@@ -583,16 +655,7 @@ def prompt_fix_menu(
     console = _Console()
 
     content = root_readme.read_text(encoding="utf-8")
-
-    # Find the actual section heading that contains "docs" / "documentation"
-    # (case-insensitive), excluding our own auto-generated heading.
-    _heading_re = re.compile(r'^(#{1,3})\s+(.+)', re.MULTILINE)
-    found_docs_section: str | None = None
-    for m in _heading_re.finditer(content):
-        title = m.group(2).strip()
-        if re.search(r'\b(docs?|documentation)\b', title, re.IGNORECASE):
-            found_docs_section = title
-            break
+    found_docs_section = _find_docs_heading(content)
     has_docs = found_docs_section is not None
 
     console.print()
@@ -606,36 +669,22 @@ def prompt_fix_menu(
     t.add_column(style="bold magenta", width=5)
     t.add_column(style="bold white", min_width=10)
     t.add_column()
-
     t.add_row(
         "[G]",
         "Generic",
         '[dim]Append a brand-new [cyan]"📎 Other Documentation"[/cyan] section at the end of README[/dim]',
     )
-
-    if has_docs:
-        docs_hint = (
-            f'[dim]Looks for any heading matching [cyan]"docs / documentation"[/cyan] — '
-            f'found: [green]"{found_docs_section}"[/green] — will append missing links there[/dim]'
-        )
-    else:
-        docs_hint = (
-            '[dim]Looks for any heading matching [cyan]"docs / documentation"[/cyan] — '
-            '[yellow]none found in README[/yellow] — you will be asked to confirm next step[/dim]'
-        )
+    docs_hint = (
+        '[dim]Looks for any heading matching [cyan]"docs / documentation"[/cyan] — '
+        + (f'found: [green]"{found_docs_section}"[/green] — will append missing links there[/dim]'
+           if has_docs else
+           '[yellow]none found in README[/yellow] — you will be asked to confirm next step[/dim]')
+    )
     t.add_row("[D]", "Docs", docs_hint)
     t.add_row("[M]", "Manual", "[dim]I'll update the README myself — no changes made[/dim]")
-
     console.print(t)
 
-    while True:
-        choice = console.input(
-            "[bold cyan]  Enter choice (G / D / M): [/bold cyan]"
-        ).strip().upper()
-        if choice in ("G", "D", "M"):
-            break
-        console.print("[red]  ✗ Invalid — please enter G, D, or M.[/red]")
-
+    choice = _prompt_input(console, "[bold cyan]  Enter choice (G / D / M): [/bold cyan]", {"G", "D", "M"})
     console.print()
 
     if choice == "M":
@@ -654,20 +703,13 @@ def prompt_fix_menu(
         sub.add_column(style="bold white", min_width=10)
         sub.add_column()
         sub.add_row("[G]", "Generic", '[dim]Create a new [cyan]"📎 Other Documentation"[/cyan] section instead[/dim]')
-        sub.add_row("[M]", "Manual",  "[dim]Cancel — I'll add or rename a section myself[/dim]")
+        sub.add_row("[M]", "Manual", "[dim]Cancel — I'll add or rename a section myself[/dim]")
         console.print(sub)
-        while True:
-            sub_choice = console.input(
-                "[bold cyan]  Enter choice (G / M): [/bold cyan]"
-            ).strip().upper()
-            if sub_choice in ("G", "M"):
-                break
-            console.print("[red]  ✗ Invalid — please enter G or M.[/red]")
+        sub_choice = _prompt_input(console, "[bold cyan]  Enter choice (G / M): [/bold cyan]", {"G", "M"})
         console.print()
         if sub_choice == "M":
             console.print("[dim]  Manual mode — no changes made.[/dim]\n")
             return
-        # User confirmed fallback to Generic
         choice = "G"
 
     if choice == "G":
