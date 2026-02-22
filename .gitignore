@@ -58,3 +58,6 @@ desktop.ini
 *.bak
 .env.local
 .env.*.local
+
+# ── Confidential ──────────────────────────────────────────────────────────────
+confidential/
